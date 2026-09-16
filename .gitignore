@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+.tools/
+artifacts/
+*.user
+*.suo
+.env
+.env.*
+**/settings.json
+**/settings.json.tmp
+*.pfx
+*.key
+*.log
+__pycache__/
