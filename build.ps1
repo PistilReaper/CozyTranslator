@@ -11,10 +11,17 @@ $zip = "$release.zip"
 if ($LASTEXITCODE -ne 0) { throw 'Core verification failed.' }
 & $dotnet run --project tests/CozyTranslator.WindowsTests -c Release -- artifacts/qa
 if ($LASTEXITCODE -ne 0) { throw 'Windows verification failed.' }
+$releasePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $release))
+$artifactsPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'artifacts'))
+if ((Split-Path -Parent $releasePath) -ne $artifactsPath) { throw 'Publish output must be directly inside artifacts.' }
+if (Test-Path -LiteralPath $releasePath) { Remove-Item -LiteralPath $releasePath -Recurse -Force }
 & $dotnet publish src/CozyTranslator.App -c Release -r win-x64 --self-contained true -o $release
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
-Copy-Item -LiteralPath 'README.md','VALIDATION.md','THIRD-PARTY.md','LICENSE' -Destination $release -Force
-Copy-Item -LiteralPath 'docs' -Destination $release -Recurse -Force
+Copy-Item -LiteralPath 'README.md','README.zh-CN.md','THIRD-PARTY.md','LICENSE' -Destination $release -Force
+$releaseDocs = Join-Path $release 'docs'
+New-Item -ItemType Directory -Path $releaseDocs -Force | Out-Null
+Copy-Item -LiteralPath 'docs/screenshots' -Destination $releaseDocs -Recurse -Force
+Copy-Item -LiteralPath "docs/RELEASE-v$version.md" -Destination $releaseDocs -Force
 $sdkRoot = Split-Path -Parent $dotnet
 foreach ($notice in @('LICENSE.txt','ThirdPartyNotices.txt')) {
     $path = Join-Path $sdkRoot $notice

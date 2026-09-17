@@ -12,3 +12,12 @@ artifacts/
 *.key
 *.log
 __pycache__/
+
+# Local agent instructions and internal working documents
+AGENTS.md
+.agents/
+.codex/
+/设计/
+/VALIDATION.md
+/docs/PUBLISHING.md
+/tools/generate-design.py
