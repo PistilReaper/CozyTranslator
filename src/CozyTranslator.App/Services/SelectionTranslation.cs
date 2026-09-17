@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
-using System.Windows.Automation;
+using System.Windows;
 using System.Windows.Threading;
 
 namespace CozyTranslator.Desktop.Services;
 
-/// <summary>Left held + right click reads the selection without touching the clipboard or input state.</summary>
+/// <summary>Left held + right click copies the selection and reads that copy from the source application.</summary>
 public sealed class SelectionTranslation : IDisposable
 {
     private readonly Dispatcher ui = Dispatcher.CurrentDispatcher;
@@ -15,9 +15,9 @@ public sealed class SelectionTranslation : IDisposable
     private nint hook, leftWindow;
     private bool leftHeld, consumeRightUp;
     private volatile bool enabled, suspended, disposed;
-    private int reading;
-    public bool Enabled { get => enabled; set => enabled = value; }
-    public bool Suspended { get => suspended; set => suspended = value; }
+    private int reading, revision;
+    public bool Enabled { get => enabled; set { if (enabled != value) { enabled = value; Interlocked.Increment(ref revision); } } }
+    public bool Suspended { get => suspended; set { if (suspended != value) { suspended = value; Interlocked.Increment(ref revision); } } }
 
     public SelectionTranslation(Action<string> selected, Action<string> notice)
     {
@@ -65,47 +65,60 @@ public sealed class SelectionTranslation : IDisposable
                 !ModifiersPressed() && Interlocked.CompareExchange(ref reading, 1, 0) == 0)
             {
                 consumeRightUp = true;
-                // Never make cross-process UI Automation calls inside the low-level hook.
-                _ = ReadSelection(input.Point, target, process);
+                // Queue after the hook returns. Clipboard access must run on the UI's STA thread.
+                int requestRevision = Volatile.Read(ref revision);
+                _ = ui.InvokeAsync(() => CopySelection(target, process, requestRevision)).Task.Unwrap();
                 return 1;
             }
         }
         return CallNextHookEx(hook, code, message, data);
     }
 
-    private async Task ReadSelection(NativePoint point, nint window, uint process)
+    private bool IsCurrent(nint window, int requestRevision) =>
+        !disposed && enabled && !suspended && requestRevision == Volatile.Read(ref revision) && window == GetForegroundWindow();
+
+    private async Task CopySelection(nint window, uint process, int requestRevision)
     {
         try
         {
-            var text = await Task.Run(() => ReadText(point, process)).WaitAsync(TimeSpan.FromSeconds(2));
-            if (disposed || !enabled || suspended || window != GetForegroundWindow()) return;
-            await ui.InvokeAsync(() =>
+            if (!IsCurrent(window, requestRevision) || ModifiersPressed()) return;
+            uint beforeCopy = DesktopServices.GetClipboardSequenceNumber();
+            Input[] keys = [Key(0x11), Key(0x43), Key(0x43, true), Key(0x11, true)];
+            uint sent = SendInput((uint)keys.Length, keys, Marshal.SizeOf<Input>());
+            if (sent != keys.Length)
             {
-                if (disposed || !enabled || suspended) return;
-                if (string.IsNullOrWhiteSpace(text)) notice("未读取到选中文字，请确认文档支持文本选择。");
-                else selected(text);
-            });
+                if (sent > 0) SendInput(2, [Key(0x43, true), Key(0x11, true)], Marshal.SizeOf<Input>());
+                notice("未能发送复制命令，请检查原应用权限。"); return;
+            }
+            long deadline = Environment.TickCount64 + 2000;
+            while (Environment.TickCount64 < deadline)
+            {
+                // Give the source time to process Ctrl+C and publish its clipboard data.
+                await Task.Delay(25);
+                if (!IsCurrent(window, requestRevision)) return;
+                uint copiedSequence = DesktopServices.GetClipboardSequenceNumber();
+                if (copiedSequence == beforeCopy) continue;
+                GetWindowThreadProcessId(GetClipboardOwner(), out uint owner);
+                if (owner != process) continue;
+                try
+                {
+                    if (!Clipboard.ContainsText()) continue;
+                    string text = Clipboard.GetText();
+                    if (copiedSequence != DesktopServices.GetClipboardSequenceNumber()) continue;
+                    if (!string.IsNullOrWhiteSpace(text)) { selected(text); return; }
+                }
+                catch (COMException) { /* A source may still be writing or rendering clipboard formats. */ }
+            }
+            if (IsCurrent(window, requestRevision)) notice("未复制到选中文字，请确认原文可以复制。");
         }
-        catch (Exception ex) when (ex is TimeoutException or ElementNotAvailableException or InvalidOperationException or COMException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is InvalidOperationException or COMException or UnauthorizedAccessException)
         {
-            if (!disposed) await ui.InvokeAsync(() => notice("无法读取当前选区，请检查文档或应用权限。"));
+            if (IsCurrent(window, requestRevision)) notice("无法读取本次复制，请检查原应用权限。");
         }
         finally { Interlocked.Exchange(ref reading, 0); }
     }
 
-    private static string ReadText(NativePoint point, uint process)
-    {
-        var element = AutomationElement.FromPoint(new System.Windows.Point(point.X, point.Y));
-        // The pointer often lands on a word/span; its document ancestor owns TextPattern.
-        for (int depth = 0; element is not null && depth < 16; depth++, element = TreeWalker.ControlViewWalker.GetParent(element))
-        {
-            if (element.Current.ProcessId != process) break;
-            if (element.Current.IsPassword) return "";
-            if (element.TryGetCurrentPattern(TextPattern.Pattern, out var pattern))
-                return string.Join("\n", ((TextPattern)pattern).GetSelection().Select(range => range.GetText(-1)).Where(text => !string.IsNullOrWhiteSpace(text)));
-        }
-        return "";
-    }
+    private static Input Key(ushort key, bool up = false) => new() { Type = 1, Data = new() { Keyboard = new() { VirtualKey = key, Flags = up ? 2u : 0 } } };
 
     private static bool ModifiersPressed() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
     public void Dispose()
@@ -117,6 +130,16 @@ public sealed class SelectionTranslation : IDisposable
     private delegate nint HookProc(int code, nint message, nint data);
     [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct MouseData { public NativePoint Point; public uint Mouse, Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputData Data; }
+    [StructLayout(LayoutKind.Explicit)] private struct InputData
+    {
+        [FieldOffset(0)] public KeyboardInput Keyboard;
+        [FieldOffset(0)] public MouseInput Mouse;
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort VirtualKey, Scan; public uint Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+    [DllImport("user32.dll")] private static extern nint GetClipboardOwner();
     [DllImport("user32.dll", SetLastError = true)] private static extern nint SetWindowsHookEx(int type, HookProc callback, nint module, uint thread);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(nint hook);
     [DllImport("user32.dll")] private static extern nint CallNextHookEx(nint hook, int code, nint message, nint data);

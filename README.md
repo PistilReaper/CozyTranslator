@@ -6,13 +6,13 @@ A lightweight Windows LLM translation and dictionary app. Bring your own API key
 
 ## Public beta
 
-[Download v0.3.0-beta.1](https://github.com/PistilReaper/CozyTranslator/releases/tag/v0.3.0-beta.1) · [Report an issue](https://github.com/PistilReaper/CozyTranslator/issues) · [MIT license](LICENSE)
+[Download v0.3.0-beta.2](https://github.com/PistilReaper/CozyTranslator/releases/tag/v0.3.0-beta.2) · [Report an issue](https://github.com/PistilReaper/CozyTranslator/issues) · [MIT license](LICENSE)
 
 ![Markdown and mathematical formulas](docs/screenshots/markdown-dark.png)
 
 ## Getting started
 
-1. Extract `CozyTranslator-v0.3.0-beta.1-win-x64.zip` to a permanent folder.
+1. Extract `CozyTranslator-v0.3.0-beta.2-win-x64.zip` to a permanent folder.
 2. Run `CozyTranslator.exe`. Keep the runtime files alongside the executable.
 3. Open settings with the gear button or “配置模型” (Configure model). Select the API protocol and enter the base URL, exact model ID, and API key.
 4. Optionally use “测试连接” (Test connection) to send a short test request, then save your settings.
@@ -26,10 +26,10 @@ To update, choose “退出” (Exit) in the old version's tray menu before extr
 ## Translation triggers
 
 - **Mode 1 · Translate on copy:** Copy text in another app to fill the source area and translate automatically.
-- **Mode 2 · Right-click mode:** Hold the left mouse button while selecting a word, sentence, or paragraph. **Without releasing the left button, click the right button with your middle finger.** A word opens a dictionary entry; longer text is translated. Selection reading leaves the clipboard unchanged, preserves ordinary context menus, and keeps focus in the source app.
+- **Mode 2 · Right-click mode:** Hold the left mouse button while selecting a word, sentence, or paragraph. **Without releasing the left button, click the right button with your middle finger.** A word opens a dictionary entry; longer text is translated. The gesture copies the selected text to the clipboard, preserves ordinary context menus, and keeps focus in the source app.
 - **Manual only:** Type and press `Ctrl+Enter`, or use the floating button or global shortcut to query the clipboard.
 
-Switch modes in settings or the tray menu. Right-click mode requires the source app to expose its text selection through Windows UI Automation. Scanned images, controls without text-selection support, and elevated windows are not guaranteed to work. If no selection is available, the app shows a message without sending an empty request.
+Switch modes in settings or the tray menu. Right-click mode sends Ctrl+C to the source app and translates only new clipboard text from that app. It does not require UI Automation text-selection support. Chrome 152 and 360 Extreme X 22.3 have been tested with selected words and sentences. Text must support copying; scanned images, copy-restricted content, elevated windows, or intercepted shortcuts may not work. Failed copying never translates old clipboard content.
 
 ## Translation and dictionary
 
@@ -90,7 +90,7 @@ Choose System, Light, or Dark. System mode follows Windows **app color mode** ch
 
 Settings are stored in `%LOCALAPPDATA%\CozyTranslator\settings.json`. API keys are encrypted with Windows DPAPI for the current user; copying this file to another account or computer does not transfer a usable key. Source and release packages do not include personal settings.
 
-Mode 1 sends text copied in other apps to your configured model. Mode 2 reads selected text only after the mouse gesture. Manual mode does not collect text automatically. Switch modes in settings or the tray menu. The app's own copy operations and settings editing do not trigger automatic translation. Source text and results stay in the current session, and requests go directly to your configured service. You can edit or reset the system prompt; dictionary lookup uses a separate structured prompt.
+Mode 1 sends text copied in other apps to your configured model. Mode 2 copies and reads selected text only after the mouse gesture, replacing the clipboard with the selected source text. Manual mode does not collect text automatically. Switch modes in settings or the tray menu. The app's own copy operations and settings editing do not trigger automatic translation. Source text and results stay in the current session, and requests go directly to your configured service. You can edit or reset the system prompt; dictionary lookup uses a separate structured prompt.
 
 ## Build and verify
 
@@ -99,7 +99,7 @@ Requires the .NET 10 SDK. Markdown uses [Markdig](https://github.com/xoofx/markd
 ```powershell
 dotnet run --project tests/CozyTranslator.Tests -c Release
 dotnet run --project tests/CozyTranslator.WindowsTests -c Release -- artifacts/qa
-dotnet publish src/CozyTranslator.App -c Release -r win-x64 --self-contained true -o artifacts/CozyTranslator-v0.3.0-beta.1-win-x64
+dotnet publish src/CozyTranslator.App -c Release -r win-x64 --self-contained true -o artifacts/CozyTranslator-v0.3.0-beta.2-win-x64
 ```
 
 Alternatively, run `build.ps1` to test, publish, and package the app. Windows checks require an interactive desktop session and include local speech verification. Visual fixtures belong to the test app and are not included in the product.

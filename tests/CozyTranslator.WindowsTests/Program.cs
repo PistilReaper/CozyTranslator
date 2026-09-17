@@ -19,7 +19,9 @@ internal static class Program
         if(args.FirstOrDefault()=="--selection-host")return SelectionChecks.Host(args[1]);
         if(args.FirstOrDefault()=="--clipboard"){System.Windows.Clipboard.SetText(args[1]);return 0;}
         int failed=0,passed=0;
-        string output=Path.GetFullPath(args.FirstOrDefault()??"artifacts/qa");Directory.CreateDirectory(output);
+        bool selectionOnly=args.FirstOrDefault()=="--selection-only";
+        bool browserSelection=args.FirstOrDefault()=="--browser-selection";
+        string output=Path.GetFullPath((browserSelection?args.ElementAtOrDefault(2):selectionOnly?args.ElementAtOrDefault(1):args.FirstOrDefault())??"artifacts/qa");Directory.CreateDirectory(output);
         var app=new System.Windows.Application {ShutdownMode=ShutdownMode.OnExplicitShutdown};
         app.Resources.MergedDictionaries.Add(new ResourceDictionary {Source=new Uri("pack://application:,,,/CozyTranslator;component/Theme.xaml")});
         typeof(System.Windows.Application).GetProperty("ThemeMode")!.SetValue(app,ThemeMode.System);
@@ -29,6 +31,8 @@ internal static class Program
         {
             try
             {
+                if(selectionOnly){await SelectionChecks.Run(Check,Assert,output);return;}
+                if(browserSelection){await BrowserSelectionChecks.Run(args[1],Check,Assert,output);return;}
                 var settings=new AppSettings {Provider=new(ApiKey:"test-key-not-real",Model:"your-model")};
                 Check("DPAPI roundtrip keeps key out of settings JSON",()=>
                 {
@@ -177,8 +181,9 @@ internal static class Program
                     Check("Clipboard pause prevents automatic translation",()=>Assert(clipboardFixture.Calls==1,"Paused clipboard was translated"));
                     autoEnabled=true;dialogOpen=true;await CopyFromOtherProcess("Settings clipboard.");await Task.Delay(350);
                     Check("Settings dialog suspends clipboard translation",()=>Assert(clipboardFixture.Calls==1,"Clipboard translated while editing API settings"));
-                    dialogOpen=false;await CopyFromOtherProcess("robust");await Task.Delay(350);
-                    Check("Copied single word automatically opens dictionary result",()=>Assert(clipboardFixture.Calls==2&&clipboardVm.HasDictionary,"Copied word did not produce a dictionary"));
+                    dialogOpen=false;await CopyFromOtherProcess("robust");
+                    for(int i=0;i<30&&!clipboardVm.HasDictionary;i++)await Task.Delay(100);
+                    Check("Copied single word automatically opens dictionary result",()=>Assert(clipboardFixture.Calls==2&&clipboardVm.HasDictionary,$"Copied word did not produce a dictionary: source={clipboardVm.Source}, calls={clipboardFixture.Calls}"));
                 }
                 finally{if(clipboardBackup is not null)System.Windows.Clipboard.SetDataObject(clipboardBackup,true);else System.Windows.Clipboard.Clear();}
                 await SelectionChecks.Run(Check,Assert,output);

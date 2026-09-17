@@ -6,13 +6,13 @@
 
 ## 公测版
 
-[下载 v0.3.0-beta.1](https://github.com/PistilReaper/CozyTranslator/releases/tag/v0.3.0-beta.1) · [反馈问题](https://github.com/PistilReaper/CozyTranslator/issues) · [MIT 许可证](LICENSE)
+[下载 v0.3.0-beta.2](https://github.com/PistilReaper/CozyTranslator/releases/tag/v0.3.0-beta.2) · [反馈问题](https://github.com/PistilReaper/CozyTranslator/issues) · [MIT 许可证](LICENSE)
 
 ![科研 Markdown 与公式](docs/screenshots/markdown-dark.png)
 
 ## 开始使用
 
-1. 解压 `CozyTranslator-v0.3.0-beta.1-win-x64.zip` 到固定目录。
+1. 解压 `CozyTranslator-v0.3.0-beta.2-win-x64.zip` 到固定目录。
 2. 运行其中的 `CozyTranslator.exe`。请保留同目录内的运行时文件。
 3. 点击齿轮或“配置模型”，选择协议，填写基础地址、准确的模型名称和 API Key。
 4. 可点“测试连接”发送一句简短的测试文本，成功后保存。
@@ -28,10 +28,10 @@
 ## 翻译触发
 
 - **模式 1 · 复制即翻译**：在其他程序复制文字，自动填入原文并翻译。
-- **模式 2 · 右键模式**：按住左键选中一句话、一段文字或单词，**左键不松开，再用中指点右键**；选词查词，句段翻译。选区读取不占用剪贴板，普通右键菜单保留，原文窗口保持焦点。
+- **模式 2 · 右键模式**：按住左键选中一句话、一段文字或单词，**左键不松开，再用中指点右键**；选词查词，句段翻译。触发时将选中的原文复制到剪贴板，普通右键菜单保留，原文窗口保持焦点。
 - **仅手动**：直接输入后按 `Ctrl+Enter`，或通过悬浮球/全局快捷键查询剪贴板。
 
-设置与托盘菜单都可切换。右键模式依赖原应用提供 Windows UI Automation 文本选区；扫描图片、不支持文本选区的控件及高权限窗口不保证支持。未读到选区会给出提示，不会发送空内容。
+设置与托盘菜单都可切换。右键模式向原应用发送 Ctrl+C，只翻译该应用本次复制产生的新文本，无需 UI Automation 选区接口。已在 Chrome 152 和 360 极速 X 22.3 验证选词及选句。原文须能正常复制；扫描图片、禁止复制的内容、高权限窗口或被拦截的快捷键不保证支持。复制失败时不会翻译剪贴板中的旧内容。
 
 ## 两种阅读方式
 
@@ -92,7 +92,7 @@
 
 设置保存在 `%LOCALAPPDATA%\CozyTranslator\settings.json`。API Key 使用 Windows DPAPI 按当前用户加密，配置文件不能直接跨账户或跨电脑迁移密钥。复制源码或发行包不会带走个人设置。
 
-模式 1 监听复制事件，将外部复制的文本发送给已配置的模型；模式 2 只在选区手势触发后读取选中文字；仅手动模式不自动采集。可在托盘或设置中切换。应用自身复制和编辑设置期间不会触发自动翻译。原文和译文只保留于当前运行会话；应用直连所配置的服务。系统提示词可以修改并恢复默认；查词使用独立的结构化提示词。
+模式 1 监听复制事件，将外部复制的文本发送给已配置的模型；模式 2 只在选区手势触发后复制并读取选中文字，剪贴板会更新为选中的原文；仅手动模式不自动采集。可在托盘或设置中切换。应用自身复制和编辑设置期间不会触发自动翻译。原文和译文只保留于当前运行会话；应用直连所配置的服务。系统提示词可以修改并恢复默认；查词使用独立的结构化提示词。
 
 ## 构建与验证
 
@@ -101,7 +101,7 @@
 ```powershell
 dotnet run --project tests/CozyTranslator.Tests -c Release
 dotnet run --project tests/CozyTranslator.WindowsTests -c Release -- artifacts/qa
-dotnet publish src/CozyTranslator.App -c Release -r win-x64 --self-contained true -o artifacts/CozyTranslator-v0.3.0-beta.1-win-x64
+dotnet publish src/CozyTranslator.App -c Release -r win-x64 --self-contained true -o artifacts/CozyTranslator-v0.3.0-beta.2-win-x64
 ```
 
 也可运行根目录 `build.ps1`，完成测试、发布和打包。Windows 测试需要正常的桌面用户环境，包含本地语音验证；可视化样例只存在于测试程序，不会进入产品。
